@@ -68,28 +68,77 @@ class WorldCupTransformer(nn.Module):
 # 2. הכנת הנתונים (Sliding Window Dataset)
 # ==========================================
 class FootballDataset(Dataset):
-    def __init__(self, num_samples=1000, seq_len=5, num_features=3):
-        """
-        כאן אנחנו מייצרים נתוני דמה שמדמים היסטוריה של משחקים.
-        במציאות, הפונקציה הזו תקבל DataFrame שנוצר מקובץ ה-CSV שלך.
-        """
-        self.seq_len = seq_len
+    def __init__(self, csv_path='results.csv', seq_len=5):
+        print("טוען נתונים מ-Kaggle, מסנן משחקי ידידות ובונה רצפי זמן...")
         
-        # רצף המשחקים האחרונים של קבוצה א' [כוח יריבה, שערי זכות, שערי חובה]
-        self.team_a_data = torch.rand(num_samples, seq_len, num_features) * 3 
-        # רצף המשחקים האחרונים של קבוצה ב'
-        self.team_b_data = torch.rand(num_samples, seq_len, num_features) * 3
+        # 1. טעינת הנתונים
+        df = pd.read_csv(csv_path)
         
-        # התוצאה האמיתית שהתרחשה במשחק שביניהן (המטרה לחיזוי)
-        # טור 1: שערים קבוצה א', טור 2: שערים קבוצה ב'
-        self.actual_scores = torch.poisson(torch.rand(num_samples, 2) * 2)
+        # המרת תאריכים לפורמט תקין וסידור כרונולוגי
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        # === סינון הנתונים (Data Cleaning) ===
+        # סינון 1: משחקים מ-2015 ואילך בלבד
+        df = df[df['date'].dt.year >= 2015]
+        
+        # סינון 2 (החדש!): הסרת משחקי ידידות
+        # אנחנו שומרים רק משחקים שבהם עמודת הטורניר היא לא 'Friendly'
+        df = df[df['tournament'] != 'Friendly']
+        # =====================================
+
+        # 2. בניית היסטוריה לכל קבוצה
+        team_histories = {}
+        
+        for index, row in df.iterrows():
+            home = row['home_team']
+            away = row['away_team']
+            
+            if home not in team_histories: team_histories[home] = []
+            if away not in team_histories: team_histories[away] = []
+                
+            # [כוח יריבה (כרגע 1.0), שערי זכות, שערי חובה]
+            team_histories[home].append([1.0, row['home_score'], row['away_score']])
+            team_histories[away].append([1.0, row['away_score'], row['home_score']])
+            
+        # 3. יצירת דוגמאות האימון (Sliding Windows)
+        self.team_a_data = []
+        self.team_b_data = []
+        self.actual_scores = []
+        
+        team_current_idx = {team: 0 for team in team_histories.keys()}
+        
+        for index, row in df.iterrows():
+            home = row['home_team']
+            away = row['away_team']
+            
+            idx_home = team_current_idx[home]
+            idx_away = team_current_idx[away]
+            
+            if idx_home >= seq_len and idx_away >= seq_len:
+                home_seq = team_histories[home][idx_home - seq_len : idx_home]
+                away_seq = team_histories[away][idx_away - seq_len : idx_away]
+                
+                self.team_a_data.append(home_seq)
+                self.team_b_data.append(away_seq)
+                self.actual_scores.append([row['home_score'], row['away_score']])
+            
+            team_current_idx[home] += 1
+            team_current_idx[away] += 1
+
+        # 4. המרה ל-Tensors של PyTorch
+        self.team_a_data = torch.tensor(self.team_a_data, dtype=torch.float32)
+        self.team_b_data = torch.tensor(self.team_b_data, dtype=torch.float32)
+        self.actual_scores = torch.tensor(self.actual_scores, dtype=torch.float32)
+        
+        print(f"נוצרו בהצלחה {len(self.actual_scores)} דוגמאות אימון איכותיות (ללא משחקי ידידות)!")
 
     def __len__(self):
         return len(self.actual_scores)
 
     def __getitem__(self, idx):
         return self.team_a_data[idx], self.team_b_data[idx], self.actual_scores[idx]
-
+   
 # ==========================================
 # 3. פונקציית תרגום פואסון (הפקת טופס ההימורים)
 # ==========================================
@@ -138,7 +187,7 @@ def main():
     EPOCHS = 20
     
     # יצירת המודל והנתונים
-    dataset = FootballDataset(num_samples=2000, seq_len=SEQ_LEN, num_features=NUM_FEATURES)
+    dataset = FootballDataset(csv_path='results.csv', seq_len=SEQ_LEN)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
     
     model = WorldCupTransformer(num_features=NUM_FEATURES)
