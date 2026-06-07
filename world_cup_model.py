@@ -9,10 +9,9 @@ from scipy.stats import poisson
 import pickle
 
 # ==========================================
-# Helper Functions: Elo Rating System
+# פונקציות עזר (מועתקות מקוד האימון)
 # ==========================================
 def calculate_expected_score(rating_a, rating_b):
-    # חישוב תוחלת הניצחון לפי פערי הדירוג
     return 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
 
 def update_elo(rating_a, rating_b, score_a, score_b, k_factor=30):
@@ -92,82 +91,87 @@ class WorldCupTransformer(nn.Module):
 # 2. Data Preparation (Sliding Window Dataset)
 # ==========================================
 class FootballDataset(Dataset):
-    def __init__(self, csv_path='results.csv', seq_len=5, split_type='train', split_year=2022):
-        print(f"Loading data for {split_type.upper()} split...")
+    def __init__(self, csv_path='results.csv', seq_len=5, split_type='train', test_size=0.1):
+        print(f"Loading data for {split_type.upper()} split (Test size: {test_size*100}%)...")
         
         df = pd.read_csv(csv_path)
-        df['date'] = pd.to_datetime(df['date'])
+        df['date'] = pd.to_datetime(df['date'], dayfirst=True, format='mixed')
         df = df.sort_values('date')
         
         df = df[df['date'].dt.year >= 2010]
         df = df[df['tournament'] != 'Friendly']
+        df = df.dropna(subset=['home_score', 'away_score']) # סינון משחקים ריקים
 
-        df = df.dropna(subset=['home_score', 'away_score'])
-
-        # אתחול ה-Elo לכל נבחרת לציון בסיס של 1500
         all_teams = pd.concat([df['home_team'], df['away_team']]).unique()
         team_elos = {team: 1500.0 for team in all_teams}
-        
         team_histories = {team: [] for team in all_teams}
         
-        for index, row in df.iterrows():
-            home = row['home_team']
-            away = row['away_team']
-            
-            # בדיקה אם יש נתון על מגרש ניטרלי (בקובץ של Kaggle זה עמודת 'neutral')
-            is_neutral = 1.0 if ('neutral' in df.columns and row['neutral']) else 0.0
-            
-            # שליפת הדירוג הנוכחי *לפני* המשחק
-            current_home_elo = team_elos[home]
-            current_away_elo = team_elos[away]
-                
-            # שמירת הנתונים להיסטוריה (נחלק את ה-Elo ב-1000 כדי שהרשת העצבית תעכל את זה טוב)
-            # מבנה חדש (5 פיצ'רים): [Elo עצמי, Elo יריבה, זכות, חובה, האם ניטרלי]
-            team_histories[home].append([current_home_elo/1000.0, current_away_elo/1000.0, row['home_score'], row['away_score'], is_neutral])
-            team_histories[away].append([current_away_elo/1000.0, current_home_elo/1000.0, row['away_score'], row['home_score'], is_neutral])
-            
-            # עדכון ה-Elo *אחרי* המשחק (משפיע רק על המשחקים הבאים)
-            new_home_elo, new_away_elo = update_elo(current_home_elo, current_away_elo, row['home_score'], row['away_score'])
-            team_elos[home] = new_home_elo
-            team_elos[away] = new_away_elo
-            
-        self.team_a_data = []
-        self.team_b_data = []
-        self.actual_scores = []
-
+        all_a_data = []
+        all_b_data = []
+        all_actual_scores = []
         
         team_current_idx = {team: 0 for team in all_teams}
         
+        # מעבר על כל הנתונים ויצירת הרצפים הכרונולוגיים
         for index, row in df.iterrows():
             home = row['home_team']
             away = row['away_team']
-            match_year = row['date'].year
+            
+            # שליפת הדירוג וחישוב הפיצ'רים החכמים
+            current_home_elo = team_elos[home]
+            current_away_elo = team_elos[away]
+            elo_diff = (current_home_elo - current_away_elo) / 1000.0
+            goal_diff = row['home_score'] - row['away_score']
+            is_neutral = True if ('neutral' in df.columns and row['neutral']) else False
+            home_adv = 0.0 if is_neutral else 1.0
+            away_adv = 0.0 if is_neutral else -1.0
             
             idx_home = team_current_idx[home]
             idx_away = team_current_idx[away]
             
+            # אם יש מספיק היסטוריה, מוסיפים לרשימה הכללית
             if idx_home >= seq_len and idx_away >= seq_len:
-                is_train = match_year < split_year
-                is_test = match_year >= split_year
+                home_seq = team_histories[home][idx_home - seq_len : idx_home]
+                away_seq = team_histories[away][idx_away - seq_len : idx_away]
                 
-                if (split_type == 'train' and is_train) or (split_type == 'test' and is_test):
-                    home_seq = team_histories[home][idx_home - seq_len : idx_home]
-                    away_seq = team_histories[away][idx_away - seq_len : idx_away]
-                    
-                    self.team_a_data.append(home_seq)
-                    self.team_b_data.append(away_seq)
-                    self.actual_scores.append([row['home_score'], row['away_score']])
+                all_a_data.append(home_seq)
+                all_b_data.append(away_seq)
+                all_actual_scores.append([row['home_score'], row['away_score']])
+            
+            # הוספת המשחק הנוכחי לזיכרון הקבוצות
+            team_histories[home].append([elo_diff, row['home_score'], row['away_score'], goal_diff, home_adv])
+            team_histories[away].append([-elo_diff, row['away_score'], row['home_score'], -goal_diff, away_adv])
             
             team_current_idx[home] += 1
             team_current_idx[away] += 1
-
-        self.team_a_data = torch.tensor(self.team_a_data, dtype=torch.float32)
-        self.team_b_data = torch.tensor(self.team_b_data, dtype=torch.float32)
-        self.actual_scores = torch.tensor(self.actual_scores, dtype=torch.float32)
+            
+            # עדכון דירוג ה-Elo לאחר המשחק
+            new_home_elo, new_away_elo = update_elo(current_home_elo, current_away_elo, row['home_score'], row['away_score'])
+            team_elos[home] = new_home_elo
+            team_elos[away] = new_away_elo
+            
+        # === חיתוך אחוזים כרונולוגי ===
+        total_samples = len(all_actual_scores)
+        split_idx = int(total_samples * (1 - test_size)) # מציאת נקודת ה-90%
         
+        if split_type == 'train':
+            final_a = all_a_data[:split_idx]
+            final_b = all_b_data[:split_idx]
+            final_scores = all_actual_scores[:split_idx]
+        else: # test
+            final_a = all_a_data[split_idx:]
+            final_b = all_b_data[split_idx:]
+            final_scores = all_actual_scores[split_idx:]
+            
+        # המרה לטנזורים
+        self.team_a_data = torch.tensor(final_a, dtype=torch.float32)
+        self.team_b_data = torch.tensor(final_b, dtype=torch.float32)
+        self.actual_scores = torch.tensor(final_scores, dtype=torch.float32)
+        
+        # שמירת הזיכרון
         self.team_elos = team_elos
         self.team_histories = team_histories
-
+        
         print(f"Successfully created {len(self.actual_scores)} examples for {split_type.upper()}!")
 
     def __len__(self):
@@ -175,121 +179,134 @@ class FootballDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.team_a_data[idx], self.team_b_data[idx], self.actual_scores[idx]
-   
+    
 # ==========================================
 # 4. Main Engine: Training and Execution
 # ==========================================
-def main():
-    print("Initializing system...")
-    
-    # Hyperparameter settings
-    SEQ_LEN = 5         # The model will look at the last 5 matches of each team
-    NUM_FEATURES = 5    # Opponent strength, goals for, goals against
-    BATCH_SIZE = 32
-    EPOCHS = 15         # Slightly reduced to prevent overfitting with train/test separation
-    
-    # Create distinct Train and Test datasets
-    train_dataset = FootballDataset(csv_path='results.csv', seq_len=SEQ_LEN, split_type='train', split_year=2022)
-    test_dataset = FootballDataset(csv_path='results.csv', seq_len=SEQ_LEN, split_type='test', split_year=2022)
-    
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False) # Important: Don't shuffle test data
-    
-    model = WorldCupTransformer(num_features=NUM_FEATURES)
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
-    
-    # PyTorch Poisson function - the heart of the model
+# ==========================================
+# מנוע אימון גנרי (לשימוש כפול: Pre-training ו-Fine-tuning)
+# ==========================================
+def train_and_evaluate(model, train_loader, test_loader, epochs, lr, weight_decay, save_path):
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     criterion = nn.PoissonNLLLoss(log_input=False)
     
-    print("Starting Transformer training...")
-    for epoch in range(EPOCHS):
-        
-        # === Training Phase ===
+    for epoch in range(epochs):
+        # === שלב האימון ===
         model.train()
         total_train_loss = 0
         for batch_a, batch_b, target_scores in train_loader:
             optimizer.zero_grad()
             
             pred_lambdas = model(batch_a, batch_b)
-            pred_lambdas = torch.clamp(pred_lambdas, min=1e-6, max=1e3)
+            pred_lambdas = torch.clamp(pred_lambdas, min=1e-4, max=50.0)
 
             loss = criterion(pred_lambdas, target_scores)
             if torch.isnan(loss):
                 continue
                         
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) # חגורת בטיחות
             optimizer.step()
             total_train_loss += loss.item()
             
         avg_train_loss = total_train_loss / len(train_loader)
         
-        # === Testing Phase ===
+        # === שלב המבחן ===
         model.eval()
         total_test_loss = 0
         with torch.no_grad():
             for batch_a, batch_b, target_scores in test_loader:
                 pred_lambdas = model(batch_a, batch_b)
-                pred_lambdas = torch.clamp(pred_lambdas, min=1e-6, max=1e3) # Keep clamping for evaluation too
+                pred_lambdas = torch.clamp(pred_lambdas, min=1e-4, max=50.0)
                 
                 loss = criterion(pred_lambdas, target_scores)
                 if not torch.isnan(loss):
                     total_test_loss += loss.item()
                     
         avg_test_loss = total_test_loss / len(test_loader)
-        
-        print(f"Epoch {epoch+1:02d}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
-            
-    print("\nTraining and Evaluation completed successfully!\n")
+        print(f"Epoch {epoch+1:02d}/{epochs} | Train Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f}")
     
-    # 1. שמירת המוח של הרשת (המשקולות)
-    torch.save(model.state_dict(), 'world_cup_model_weights.pth')
-    print("Model weights saved to 'world_cup_model_weights.pth'")
+    # שמירת המשקולות בסוף תהליך האימון הזה
+    torch.save(model.state_dict(), save_path)
+    print(f"--> נשמר קובץ משקולות: {save_path}\n")
+    return model
 
-    # 2. שמירת ה"זיכרון" (הדירוגים העדכניים והיסטוריית המשחקים) מתוך קבוצת המבחן/אימון
+
+# ==========================================
+# Main Engine: Transfer Learning Pipeline
+# ==========================================
+def main():
+    print("מתחיל מערכת Transfer Learning...")
+    
+    SEQ_LEN = 5
+    NUM_FEATURES = 5
+    BATCH_SIZE = 32
+    
+    # אתחול הארכיטקטורה
+    model = WorldCupTransformer(num_features=NUM_FEATURES)
+    
+    # =========================================================
+    # Phase 1: Pre-training (למידת כדורגל כללית על מועדונים)
+    # =========================================================
+    print("==================================================")
+    print("PHASE 1: Pre-training on Club Data")
+    print("==================================================")
+    
+    # נטען את נתוני המועדונים ונחלק 90/10
+    club_train = FootballDataset(csv_path='club_results.csv', seq_len=SEQ_LEN, split_type='train', test_size=0.1)
+    club_test  = FootballDataset(csv_path='club_results.csv', seq_len=SEQ_LEN, split_type='test', test_size=0.1)
+    
+    club_train_loader = DataLoader(club_train, batch_size=BATCH_SIZE, shuffle=True)
+    club_test_loader  = DataLoader(club_test, batch_size=BATCH_SIZE, shuffle=False)
+    
+    # נאמן את הרשת מאפס, עם קצב למידה סטנדרטי למשך 15 Epochs
+    model = train_and_evaluate(
+        model=model, 
+        train_loader=club_train_loader, 
+        test_loader=club_test_loader, 
+        epochs=15, 
+        lr=0.0001, 
+        weight_decay=1e-4, 
+        save_path='pretrained_clubs.pth'
+    )
+    
+    # =========================================================
+    # Phase 2: Fine-Tuning (התאמה עדינה לכדורגל נבחרות)
+    # =========================================================
+    print("==================================================")
+    print("PHASE 2: Fine-Tuning on National Teams Data")
+    print("==================================================")
+    
+    # נטען את נתוני הנבחרות (זה גם ישמור את ה-pkl המעודכן למונדיאל!)
+    nat_train = FootballDataset(csv_path='national_results.csv', seq_len=SEQ_LEN, split_type='train', test_size=0.1)
+    nat_test  = FootballDataset(csv_path='national_results.csv', seq_len=SEQ_LEN, split_type='test', test_size=0.1)
+    
+    nat_train_loader = DataLoader(nat_train, batch_size=BATCH_SIZE, shuffle=True)
+    nat_test_loader  = DataLoader(nat_test, batch_size=BATCH_SIZE, shuffle=False)
+    
+    # טריק קריטי: אנחנו טוענים את ה"מוח" שהתאמן על המועדונים
+    model.load_state_dict(torch.load('pretrained_clubs.pth'))
+    
+    # נאמן שוב, אבל הפעם: קצב למידה איטי בהרבה (כדי לא להרוס מה שנלמד) ורק 4 Epochs!
+    model = train_and_evaluate(
+        model=model, 
+        train_loader=nat_train_loader, 
+        test_loader=nat_test_loader, 
+        epochs=4, 
+        lr=0.00001,  # שמנו פה עוד אפס - אנחנו רק "מעדנים" את המשקולות
+        weight_decay=1e-4, 
+        save_path='world_cup_final_model.pth'
+    )
+    
+    # שמירת הזיכרון (היסטוריות ו-Elo) מהנבחרות עבור סקריפט החיזוי החי
+    import pickle
     tournament_state = {
-        'elos': test_dataset.team_elos, 
-        'histories': test_dataset.team_histories
+        'elos': nat_test.team_elos, 
+        'histories': nat_test.team_histories
     }
     with open('tournament_state.pkl', 'wb') as f:
         pickle.dump(tournament_state, f)
-    print("Tournament state saved to 'tournament_state.pkl'")
+    print("Tournament state saved to 'tournament_state.pkl' - המערכת מוכנה למונדיאל!")
 
-    # ==========================================
-    # 5. Live Prediction for World Cup (Updated for 5 Features)
-    # ==========================================
-    # print("Generating predictions for selected matches...")
-    
-    # # היסטוריה לנבחרת עילית (למשל צרפת - Elo משוער 2000 -> 2.0)
-    # # מבנה: [Elo עצמי, Elo יריבה, זכות, חובה, האם ניטרלי]
-    # history_strong = [
-    #     [2.0, 1.5, 2, 0, 1.0], # ניצחון על קבוצה ממוצעת במגרש ניטרלי
-    #     [2.0, 1.8, 3, 1, 1.0], # ניצחון על קבוצה טובה במגרש ניטרלי
-    #     [2.0, 1.4, 1, 0, 0.0], # ניצחון דחוק על קבוצה חלשה (בבית)
-    #     [2.0, 1.9, 2, 1, 1.0], # ניצחון על נבחרת צמרת
-    #     [2.0, 1.3, 4, 0, 1.0]  # תבוסה לקבוצה חלשה מאוד
-    # ]
-    
-    # # היסטוריה לנבחרת חלשה (למשל עיראק - Elo משוער 1400 -> 1.4)
-    # history_weak = [
-    #     [1.4, 1.5, 1, 1, 0.0], # תיקו מול קבוצה ממוצעת בבית
-    #     [1.4, 1.7, 0, 2, 1.0], # הפסד לקבוצה סבירה במגרש ניטרלי
-    #     [1.4, 1.9, 0, 3, 1.0], # תבוסה לנבחרת צמרת
-    #     [1.4, 1.4, 1, 1, 1.0], # תיקו מול נבחרת שקולה
-    #     [1.4, 1.6, 0, 2, 0.0]  # הפסד לקבוצה קצת יותר טובה בבית
-    # ]
-    
-    # # היסטוריה לנבחרת עילית נוספת (למשל אנגליה - Elo משוער 1950 -> 1.95)
-    # history_strong_2 = [
-    #     [1.95, 1.6, 1, 0, 1.0], # ניצחון מול קבוצה סבירה
-    #     [1.95, 1.8, 1, 1, 1.0], # תיקו מול קבוצה טובה
-    #     [1.95, 1.5, 2, 0, 0.0], # ניצחון בבית מול קבוצה ממוצעת
-    #     [1.95, 2.0, 0, 0, 1.0], # תיקו מאופס מול נבחרת עילית
-    #     [1.95, 1.7, 2, 1, 1.0]  # ניצחון מול קבוצה בינונית פלוס
-    # ]
-
-    # הרצת התחזיות: המודל עכשיו מקבל את מלוא ההקשר!
-    # predict_match_outcome(model, history_strong, history_weak, "France", "Iraq")
-    # predict_match_outcome(model, history_strong, history_strong_2, "France", "England")
 if __name__ == "__main__":
     main()
