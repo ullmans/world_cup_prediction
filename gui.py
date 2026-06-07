@@ -1,32 +1,63 @@
 import streamlit as st
 import time
 
+TEAMS_MAPPING = {
+    "אוזבקיסטן": "Uzbekistan",
+    "אוסטריה": "Austria",
+    "אוסטרליה": "Australia",
+    "אורוגוואי": "Uruguay",
+    "איראן": "Iran",
+    "אלג'יריה": "Algeria",
+    "אנגליה": "England",
+    "אקוודור": "Ecuador",
+    "ארגנטינה": "Argentina",
+    "ארצות הברית": "United States",
+    "בוסניה והרצגובינה": "Bosnia and Herzegovina",
+    "בלגיה": "Belgium",
+    "ברזיל": "Brazil",
+    "גאנה": "Ghana",
+    "גרמניה": "Germany",
+    "דרום קוריאה": "South Korea",
+    "האיטי": "Haiti",
+    "הולנד": "Netherlands",
+    "הרפובליקה הדמוקרטית של קונגו": "DR Congo",
+    "חוף השנהב": "Ivory Coast",
+    "טורקיה": "Turkey",
+    "יפן": "Japan",
+    "ירדן": "Jordan",
+    "כף ורדה": "Cape Verde",
+    "מצרים": "Egypt",
+    "מקסיקו": "Mexico",
+    "מרוקו": "Morocco",
+    "נורווגיה": "Norway",
+    "ניו זילנד": "New Zealand",
+    "סנגל": "Senegal",
+    "ספרד": "Spain",
+    "סקוטלנד": "Scotland",
+    "עיראק": "Iraq",
+    "ערב הסעודית": "Saudi Arabia",
+    "פורטוגל": "Portugal",
+    "פנמה": "Panama",
+    "פרגוואי": "Paraguay",
+    "צ'כיה": "Czech Republic",
+    "צרפת": "France",
+    "קולומביה": "Colombia",
+    "קורסאו": "Curaçao",
+    "קוריאה הדרומית": "South Korea",
+    "קטאר": "Qatar",
+    "קנדה": "Canada",
+    "קרואטיה": "Croatia",
+    "שוודיה": "Sweden",
+    "שווייץ": "Switzerland",
+    "תוניסיה": "Tunisia"
+}
+
+# יצירת רשימה ממוינת של הנבחרות בעברית עבור תיבות הבחירה
+hebrew_team_names = sorted(list(TEAMS_MAPPING.keys()))
+
 # --- כאן תייבא את הפונקציה האמיתית שלך מה-Backend ---
 from live_predictor import main_live_predictor
 from update_memory import update_tournament_memory
-
-def mock_main_live_predictor(team1: str, team2: str):
-    """
-    פונקציית דמי שמדמה את ה-Backend שלך.
-    מקבלת שתי קבוצות באנגלית ומחזירה את 3 התחזיות המובילות.
-    """
-    # סימולציה של השהיית חישוב
-    time.sleep(1.5)
-    
-    return [
-        {"result": f"{team1} 2 - 1 {team2}", "probability": 35.5},
-        {"result": "Draw 1 - 1", "probability": 28.0},
-        {"result": f"{team2} 1 - 0 {team1}", "probability": 15.2}
-    ]
-
-
-def mock_update_actual_result(team1: str, team2: str, score1: int, score2: int):
-    """
-    פונקציה שמדמה שליחת נתונים ל-backend כדי לשמור תוצאת אמת
-    שתשפיע על המשך הטורניר.
-    """
-    time.sleep(1)
-    return True
 
 # --- הגדרות עיצוב ---
 st.set_page_config(page_title="World Cup Predictor", page_icon="⚽", layout="centered")
@@ -37,26 +68,33 @@ tab_predict, tab_update = st.tabs(["🔮 חיזוי משחק חדש", "📝 הז
 # לשונית 1: חיזוי משחקים
 # ==========================================
 with tab_predict:
-    # --- אזור הקלט ---
-    st.markdown("הכנס את שמות הקבוצות באנגלית כדי לקבל את 3 התוצאות הסבירות ביותר למשחק.")
+    st.markdown("בחר את הנבחרות כדי לקבל את 3 התוצאות הסבירות ביותר למשחק.")
+    
     col_input1, col_input2 = st.columns(2)
     with col_input1:
-        team1_input = st.text_input("Home Team (English)", placeholder="e.g., Argentina")
+        # החלפה ל-selectbox בעברית
+        team1_hebrew = st.selectbox("נבחרת מארחת:", hebrew_team_names, key="pred_t1")
     with col_input2:
-        team2_input = st.text_input("Away Team (English)", placeholder="e.g., France")
+        # החלפה ל-selectbox בעברית
+        team2_hebrew = st.selectbox("נבחרת אורחת:", hebrew_team_names, key="pred_t2")
 
     # --- הרצת החיזוי ---
     if st.button("🚀 Predict Match"):
-        if team1_input and team2_input:
+        if team1_hebrew == team2_hebrew:
+            st.error("שגיאה: אי אפשר לבחור את אותה נבחרת פעמיים!")
+        else:
+            # תרגום לאנגלית מאחורי הקלעים עבור המודל
+            team1_english = TEAMS_MAPPING[team1_hebrew]
+            team2_english = TEAMS_MAPPING[team2_hebrew]
+            
             with st.spinner('מריץ את המודל...'):
-                # קריאה לפונקציית ה-Backend (כאן קוראים לפונקציית ה-Mock)
-                predictions = main_live_predictor(team1_input, team2_input)
+                # קריאה לפונקציית ה-Backend עם השמות באנגלית
+                predictions = main_live_predictor(team1_english, team2_english)
                 
             st.success("החיזוי הושלם!")
             st.markdown("### 🏆 Top 3 Predicted Outcomes")
             
             # --- תצוגת 3 התחזיות המובילות ---
-            # שימוש בעמודות כדי להציג את התחזיות זו לצד זו בצורה יפה
             col1, col2, col3 = st.columns(3)
             
             # תחזית 1 (הכי סבירה)
@@ -79,9 +117,6 @@ with tab_predict:
                 st.metric(label="תוצאה חזויה", value=str(predictions[2][0])+"-"+str(predictions[2][1]))
                 st.progress(int(predictions[2][2]))
                 st.caption(f"סיכוי: {predictions[2][2]}%")
-                
-        else:
-            st.warning("נא להזין את שמות שתי הקבוצות לפני הרצת החיזוי.")
 
 
 # ==========================================
@@ -92,19 +127,25 @@ with tab_update:
     
     col_u1, col_u2 = st.columns(2)
     with col_u1:
-        team1_update = st.text_input("Home Team", key="upd_t1")
+        # החלפה ל-selectbox בעברית
+        team1_upd_hebrew = st.selectbox("נבחרת מארחת:", hebrew_team_names, key="upd_t1")
         score1_update = st.number_input("Home Score", min_value=0, step=1, key="upd_s1")
     with col_u2:
-        team2_update = st.text_input("Away Team", key="upd_t2")
+        # החלפה ל-selectbox בעברית
+        team2_upd_hebrew = st.selectbox("נבחרת אורחת:", hebrew_team_names, key="upd_t2")
         score2_update = st.number_input("Away Score", min_value=0, step=1, key="upd_s2")
         
     if st.button("💾 שמור תוצאה ועדכן מודל"):
-        if team1_update and team2_update:
+        if team1_upd_hebrew == team2_upd_hebrew:
+            st.error("שגיאה: אי אפשר לעדכן משחק של נבחרת נגד עצמה!")
+        else:
+            # תרגום לאנגלית מאחורי הקלעים
+            team1_upd_english = TEAMS_MAPPING[team1_upd_hebrew]
+            team2_upd_english = TEAMS_MAPPING[team2_upd_hebrew]
+            
             with st.spinner("שולח נתונים ל-Backend..."):
-                # כאן אתה קורא לפונקציית ה-Backend שלך שמעדכנת את מצב הטורניר/המודל
-                success = update_tournament_memory(str(team1_update), str(team2_update), int(score1_update), int(score2_update))
+                # קריאה לפונקציית העדכון עם השמות באנגלית
+                success = update_tournament_memory(team1_upd_english, team2_upd_english, int(score1_update), int(score2_update))
             
             if success:
-                st.success(f"התוצאה ({team1_update} {score1_update} - {score2_update} {team2_update}) נשמרה בהצלחה והמערכת עודכנה!")
-        else:
-            st.error("נא להזין את שמות שתי הקבוצות לפני השמירה.")
+                st.success(f"התוצאה ({team1_upd_hebrew} {score1_update} - {score2_update} {team2_upd_hebrew}) נשמרה בהצלחה והמערכת עודכנה!")
