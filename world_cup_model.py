@@ -102,6 +102,8 @@ class FootballDataset(Dataset):
         df = df[df['date'].dt.year >= 2010]
         df = df[df['tournament'] != 'Friendly']
 
+        df = df.dropna(subset=['home_score', 'away_score'])
+
         # אתחול ה-Elo לכל נבחרת לציון בסיס של 1500
         all_teams = pd.concat([df['home_team'], df['away_team']]).unique()
         team_elos = {team: 1500.0 for team in all_teams}
@@ -132,6 +134,7 @@ class FootballDataset(Dataset):
         self.team_a_data = []
         self.team_b_data = []
         self.actual_scores = []
+
         
         team_current_idx = {team: 0 for team in all_teams}
         
@@ -162,6 +165,9 @@ class FootballDataset(Dataset):
         self.team_b_data = torch.tensor(self.team_b_data, dtype=torch.float32)
         self.actual_scores = torch.tensor(self.actual_scores, dtype=torch.float32)
         
+        self.team_elos = team_elos
+        self.team_histories = team_histories
+
         print(f"Successfully created {len(self.actual_scores)} examples for {split_type.upper()}!")
 
     def __len__(self):
@@ -225,7 +231,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False) # Important: Don't shuffle test data
     
     model = WorldCupTransformer(num_features=NUM_FEATURES)
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
     
     # PyTorch Poisson function - the heart of the model
     criterion = nn.PoissonNLLLoss(log_input=False)
@@ -247,6 +253,7 @@ def main():
                 continue
                         
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_train_loss += loss.item()
             
@@ -282,6 +289,7 @@ def main():
     with open('tournament_state.pkl', 'wb') as f:
         pickle.dump(tournament_state, f)
     print("Tournament state saved to 'tournament_state.pkl'")
+
     # ==========================================
     # 5. Live Prediction for World Cup (Updated for 5 Features)
     # ==========================================
