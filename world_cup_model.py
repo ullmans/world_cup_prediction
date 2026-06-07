@@ -177,41 +177,6 @@ class FootballDataset(Dataset):
         return self.team_a_data[idx], self.team_b_data[idx], self.actual_scores[idx]
    
 # ==========================================
-# 3. Poisson Distribution Function (Generating Betting Form)
-# ==========================================
-def predict_match_outcome(model, team_a_history, team_b_history, team_a_name="Group A", team_b_name="Group B"):
-    model.eval()
-    with torch.no_grad():
-        # Add batch dimension
-        team_a_tensor = torch.tensor(team_a_history, dtype=torch.float32).unsqueeze(0)
-        team_b_tensor = torch.tensor(team_b_history, dtype=torch.float32).unsqueeze(0)
-        
-        lambdas = model(team_a_tensor, team_b_tensor)
-        lam_a = lambdas[0][0].item()
-        lam_b = lambdas[0][1].item()
-        
-    print(f"\n[{team_a_name} vs {team_b_name}]")
-    print(f"Calculated expected goals (xG): {team_a_name} ({lam_a:.2f}) - {team_b_name} ({lam_b:.2f})")
-    
-    probabilities = []
-    # Calculate probabilities for all possible outcomes (0 to 5 goals)
-    for goals_a in range(6):
-        for goals_b in range(6):
-            prob_a = poisson.pmf(goals_a, lam_a)
-            prob_b = poisson.pmf(goals_b, lam_b)
-            exact_prob = prob_a * prob_b * 100
-            probabilities.append((goals_a, goals_b, exact_prob))
-            
-    probabilities.sort(key=lambda x: x[2], reverse=True)
-    
-    print("-" * 35)
-    print("Most recommended outcomes:")
-    for i in range(3):
-        ga, gb, p = probabilities[i]
-        print(f"Exact score: {ga}-{gb}  |  Probability: {p:.1f}%")
-    print("-" * 35)
-
-# ==========================================
 # 4. Main Engine: Training and Execution
 # ==========================================
 def main():
@@ -293,38 +258,38 @@ def main():
     # ==========================================
     # 5. Live Prediction for World Cup (Updated for 5 Features)
     # ==========================================
-    print("Generating predictions for selected matches...")
+    # print("Generating predictions for selected matches...")
     
-    # היסטוריה לנבחרת עילית (למשל צרפת - Elo משוער 2000 -> 2.0)
-    # מבנה: [Elo עצמי, Elo יריבה, זכות, חובה, האם ניטרלי]
-    history_strong = [
-        [2.0, 1.5, 2, 0, 1.0], # ניצחון על קבוצה ממוצעת במגרש ניטרלי
-        [2.0, 1.8, 3, 1, 1.0], # ניצחון על קבוצה טובה במגרש ניטרלי
-        [2.0, 1.4, 1, 0, 0.0], # ניצחון דחוק על קבוצה חלשה (בבית)
-        [2.0, 1.9, 2, 1, 1.0], # ניצחון על נבחרת צמרת
-        [2.0, 1.3, 4, 0, 1.0]  # תבוסה לקבוצה חלשה מאוד
-    ]
+    # # היסטוריה לנבחרת עילית (למשל צרפת - Elo משוער 2000 -> 2.0)
+    # # מבנה: [Elo עצמי, Elo יריבה, זכות, חובה, האם ניטרלי]
+    # history_strong = [
+    #     [2.0, 1.5, 2, 0, 1.0], # ניצחון על קבוצה ממוצעת במגרש ניטרלי
+    #     [2.0, 1.8, 3, 1, 1.0], # ניצחון על קבוצה טובה במגרש ניטרלי
+    #     [2.0, 1.4, 1, 0, 0.0], # ניצחון דחוק על קבוצה חלשה (בבית)
+    #     [2.0, 1.9, 2, 1, 1.0], # ניצחון על נבחרת צמרת
+    #     [2.0, 1.3, 4, 0, 1.0]  # תבוסה לקבוצה חלשה מאוד
+    # ]
     
-    # היסטוריה לנבחרת חלשה (למשל עיראק - Elo משוער 1400 -> 1.4)
-    history_weak = [
-        [1.4, 1.5, 1, 1, 0.0], # תיקו מול קבוצה ממוצעת בבית
-        [1.4, 1.7, 0, 2, 1.0], # הפסד לקבוצה סבירה במגרש ניטרלי
-        [1.4, 1.9, 0, 3, 1.0], # תבוסה לנבחרת צמרת
-        [1.4, 1.4, 1, 1, 1.0], # תיקו מול נבחרת שקולה
-        [1.4, 1.6, 0, 2, 0.0]  # הפסד לקבוצה קצת יותר טובה בבית
-    ]
+    # # היסטוריה לנבחרת חלשה (למשל עיראק - Elo משוער 1400 -> 1.4)
+    # history_weak = [
+    #     [1.4, 1.5, 1, 1, 0.0], # תיקו מול קבוצה ממוצעת בבית
+    #     [1.4, 1.7, 0, 2, 1.0], # הפסד לקבוצה סבירה במגרש ניטרלי
+    #     [1.4, 1.9, 0, 3, 1.0], # תבוסה לנבחרת צמרת
+    #     [1.4, 1.4, 1, 1, 1.0], # תיקו מול נבחרת שקולה
+    #     [1.4, 1.6, 0, 2, 0.0]  # הפסד לקבוצה קצת יותר טובה בבית
+    # ]
     
-    # היסטוריה לנבחרת עילית נוספת (למשל אנגליה - Elo משוער 1950 -> 1.95)
-    history_strong_2 = [
-        [1.95, 1.6, 1, 0, 1.0], # ניצחון מול קבוצה סבירה
-        [1.95, 1.8, 1, 1, 1.0], # תיקו מול קבוצה טובה
-        [1.95, 1.5, 2, 0, 0.0], # ניצחון בבית מול קבוצה ממוצעת
-        [1.95, 2.0, 0, 0, 1.0], # תיקו מאופס מול נבחרת עילית
-        [1.95, 1.7, 2, 1, 1.0]  # ניצחון מול קבוצה בינונית פלוס
-    ]
+    # # היסטוריה לנבחרת עילית נוספת (למשל אנגליה - Elo משוער 1950 -> 1.95)
+    # history_strong_2 = [
+    #     [1.95, 1.6, 1, 0, 1.0], # ניצחון מול קבוצה סבירה
+    #     [1.95, 1.8, 1, 1, 1.0], # תיקו מול קבוצה טובה
+    #     [1.95, 1.5, 2, 0, 0.0], # ניצחון בבית מול קבוצה ממוצעת
+    #     [1.95, 2.0, 0, 0, 1.0], # תיקו מאופס מול נבחרת עילית
+    #     [1.95, 1.7, 2, 1, 1.0]  # ניצחון מול קבוצה בינונית פלוס
+    # ]
 
     # הרצת התחזיות: המודל עכשיו מקבל את מלוא ההקשר!
-    predict_match_outcome(model, history_strong, history_weak, "France", "Iraq")
-    predict_match_outcome(model, history_strong, history_strong_2, "France", "England")
+    # predict_match_outcome(model, history_strong, history_weak, "France", "Iraq")
+    # predict_match_outcome(model, history_strong, history_strong_2, "France", "England")
 if __name__ == "__main__":
     main()
