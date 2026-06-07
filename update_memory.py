@@ -72,6 +72,8 @@ def update_tournament_memory(team_a, team_b, score_a, score_b):
     print(f"העדכון בוצע בהצלחה ונשמר!")
     print(f"דירוג מעודכן: {team_a} ({new_elo_a:.1f}) | {team_b} ({new_elo_b:.1f})\n")
 
+    return True
+
 # ==========================================
 # הפעלת הסקריפט
 # ==========================================
