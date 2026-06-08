@@ -78,11 +78,12 @@ def main():
     print("PHASE 1: Pre-training on Club Data")
     print("==================================================")
 
+    train_ratio = 0.9
     club_train = FootballDataset(
-        csv_path=CLUB_RESULTS_CSV, seq_len=SEQ_LEN, split_type='train', test_size=0.1
+        csv_path=CLUB_RESULTS_CSV, seq_len=SEQ_LEN, split_type='train', train_ratio = train_ratio
     )
     club_test = FootballDataset(
-        csv_path=CLUB_RESULTS_CSV, seq_len=SEQ_LEN, split_type='test', test_size=0.1
+        csv_path=CLUB_RESULTS_CSV, seq_len=SEQ_LEN, split_type='test', train_ratio = train_ratio
     )
 
     club_train_loader = DataLoader(club_train, batch_size=BATCH_SIZE, shuffle=True)

@@ -8,8 +8,11 @@ from world_cup_prediction.features import build_match_features
 
 
 class FootballDataset(Dataset):
-    def __init__(self, csv_path, seq_len=SEQ_LEN, split_type='train', test_size=0.1):
-        print(f"Loading data for {split_type.upper()} split (Test size: {test_size * 100}%)...")
+    def __init__(self, csv_path, seq_len=SEQ_LEN, split_type='train', train_ratio = 0.9):
+        if split_type =='train':
+            print(f"Loading data for {split_type.upper()} split (Train size: {train_ratio * 100}%)...")
+        else:
+            print(f"Loading data for {split_type.upper()} split (Test size: {100 - train_ratio * 100}%)...")
 
         df = pd.read_csv(csv_path)
         df['date'] = pd.to_datetime(df['date'], dayfirst=True, format='mixed')
@@ -68,8 +71,7 @@ class FootballDataset(Dataset):
             team_elos[away] = new_away_elo
 
         total_samples = len(all_actual_scores)
-        split_idx = int(total_samples * (1 - test_size))
-
+        split_idx = int(total_samples * train_ratio)
         if split_type == 'train':
             final_a = all_a_data[:split_idx]
             final_b = all_b_data[:split_idx]
