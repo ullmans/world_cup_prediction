@@ -205,7 +205,7 @@ $$P(\text{Score} = k_1-k_2) = P_A(k_1) \times P_B(k_2)$$
 
 The model implements dynamic team strength estimation:
 
-$$\text{Expected Score} = \frac{1}{1 + 10^{\frac{\text{opponent\_rating} - \text{team\_rating}}{400}}}$$
+$$\text{Expected Score} = \frac{1}{1 + 10^{\frac{\text{opponent rating} - \text{team rating}}{400}}}$$
 
 $$\text{New Rating} = \text{Old Rating} + K \times (\text{Actual} - \text{Expected})$$
 
