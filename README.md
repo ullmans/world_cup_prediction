@@ -1,48 +1,56 @@
-# 🏆 World Cup Prediction AI
+# World Cup Prediction AI
 
 AI-powered football match predictor using Transformer neural networks and Poisson distribution analysis.
 
 A machine learning system that predicts international football match outcomes with probabilistic scoreline predictions. Combines historical match data, ELO ratings, and advanced deep learning to estimate expected goals and generate accurate match forecasts.
 
-## 📋 Overview
+## Overview
 
-This project implements a sophisticated Transformer-based neural network trained on international football match results to predict match outcomes with quantified probabilities. The model analyzes team performance histories, accounts for ELO ratings, and uses Poisson statistics to generate realistic score predictions.
+This project implements a Transformer-based neural network trained on international football match results to predict match outcomes with quantified probabilities. The model analyzes team performance histories, accounts for ELO ratings, and uses Poisson statistics to generate realistic score predictions.
 
-## 🎯 Key Features
+## Key Features
 
 - **Advanced Transformer Architecture:** Multi-head self-attention mechanism captures temporal patterns in team performance.
 - **Positional Encoding:** Chronological encoding preserves the temporal context of match sequences.
-- **Poisson-Based Predictions:** Converts predicted expected goals ($\lambda$) into probability distributions for all possible scorelines.
+- **Poisson-Based Predictions:** Converts predicted expected goals (λ) into probability distributions for all possible scorelines.
 - **ELO Rating System:** Implements dynamic team strength estimation for more accurate predictions.
 - **Dual Dataset Support:** Trains on both national team and club-level match data.
 - **Interactive GUI:** Streamlit-based interface for easy match predictions.
 - **Live Prediction Engine:** Real-time prediction capability with Hebrew/English team name support.
 - **Model Persistence:** Pre-trained model weights for immediate predictions without retraining.
 
-## 📁 Project Structure
+## Project Structure
 
 ```plaintext
-├── world_cup_model.py           # Core Transformer model & training pipeline
-├── live_predictor.py            # Match prediction engine with Poisson calculations
-├── gui.py                       # Streamlit web interface for predictions
-├── download_club_data.py        # Club match data downloader
-├── update_memory.py             # Memory update utilities
-│
-├── national_results.csv         # International match historical data
-├── club_results.csv             # Club match historical data
-│
-├── world_cup_final_model.pth    # Pre-trained national team model weights
-├── world_cup_model_weights.pth  # Alternative model weights checkpoint
-├── pretrained_clubs.pth         # Pre-trained club-level model weights
-├── tournament_state.pkl         # Serialized tournament state for live predictions
-│
-├── req.txt                      # Python dependencies
-├── dockerfile                   # Docker containerization config
-├── .gitignore                   # Git ignore rules
-└── README.md                    # This file
+world_cup_prediction/
+├── src/world_cup_prediction/     # Installable Python package
+│   ├── config.py                   # Paths and hyperparameters
+│   ├── elo.py                      # ELO rating calculations
+│   ├── features.py                 # Shared match feature vectors
+│   ├── model.py                    # Transformer architecture
+│   ├── dataset.py                  # FootballDataset
+│   ├── train.py                    # Training pipeline
+│   ├── predictor.py                # Live match predictions
+│   └── memory.py                   # Tournament state updates
+├── app/
+│   └── gui.py                      # Streamlit web interface
+├── scripts/
+│   └── download_club_data.py       # Club match data downloader
+├── data/
+│   ├── club_results.csv            # Club match historical data
+│   ├── national_results.csv        # International match data (user-provided)
+│   └── teams_mapping.json          # Hebrew/English team name mapping
+├── artifacts/                      # Generated model outputs (gitignored)
+│   ├── pretrained_clubs.pth
+│   ├── world_cup_model.pth
+│   └── tournament_state.pkl
+├── requirements.txt
+├── pyproject.toml
+├── Dockerfile
+└── README.md
 ```
 
-## 🧠 Model Architecture
+## Model Architecture
 
 ### Transformer-Based Design
 
@@ -73,10 +81,10 @@ Extract Final State               Extract Final State
 | Input Projection | Maps raw features to d_model dimensions |
 | Positional Encoding | Adds temporal information to sequences |
 | Transformer Encoder | Multi-head attention (4 heads) across match sequences |
-| Output Head | Dense layers predicting expected goals ($\lambda$) |
-| Softplus Activation | Ensures $\lambda$ remains non-negative |
+| Output Head | Dense layers predicting expected goals (λ) |
+| Softplus Activation | Ensures λ remains non-negative |
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -90,23 +98,34 @@ Extract Final State               Extract Final State
 **Setup:**
 
 ```bash
-pip install -r req.txt
+pip install -e .
 ```
+
+### Migration from the old flat layout
+
+If you have existing files at the project root from a previous version:
+
+1. Move `national_results.csv` → `data/national_results.csv`
+2. Move model artifacts to `artifacts/`:
+   - `pretrained_clubs.pth`
+   - `world_cup_final_model.pth` or `world_cup_model_weights.pth` → rename to `artifacts/world_cup_model.pth`
+   - `tournament_state.pkl` → `artifacts/tournament_state.pkl`
+3. Re-run training if your `tournament_state.pkl` was built with the old feature schema.
 
 ### Usage
 
 #### 1. Train the Model
 
 ```bash
-python world_cup_model.py
+python -m world_cup_prediction.train
 ```
 
-Trains the Transformer on historical match data, saves weights to `world_cup_final_model.pth`.
+Trains the Transformer on historical match data and saves weights to `artifacts/world_cup_model.pth`.
 
 #### 2. Web Interface (Recommended)
 
 ```bash
-streamlit run gui.py
+streamlit run app/gui.py
 ```
 
 Opens an interactive web app for match predictions with bilingual team name support (Hebrew/English).
@@ -114,20 +133,26 @@ Opens an interactive web app for match predictions with bilingual team name supp
 #### 3. Live Predictions (Programmatic)
 
 ```python
-from live_predictor import main_live_predictor
+from world_cup_prediction import main_live_predictor
 
 predictions = main_live_predictor("France", "England")
 # Returns top 3 scoreline predictions with probabilities
 ```
 
-#### 4. Docker Deployment
+#### 4. Download Club Data
+
+```bash
+python scripts/download_club_data.py
+```
+
+#### 5. Docker Deployment
 
 ```bash
 docker build -t world-cup-prediction .
 docker run world-cup-prediction
 ```
 
-## 💾 Data Format
+## Data Format
 
 ### Input CSV Structure
 
@@ -148,21 +173,21 @@ docker run world-cup-prediction
 - **Sliding Window:** Create sequences of last N matches per team (default: 5).
 - **Normalization:** Scale features for neural network input.
 
-## 🎮 Model Parameters
+## Model Parameters
 
 | Hyperparameter | Value | Description |
 |----------------|-------|-------------|
 | SEQ_LEN | 5 | Past matches per team in sequence |
-| NUM_FEATURES | 3 | Input features (opponent strength, GF, GA) |
+| NUM_FEATURES | 5 | Input features (elo_diff, GF, GA, goal_diff, home_adv) |
 | BATCH_SIZE | 32 | Training batch size |
-| EPOCHS | 20 | Training iterations |
+| EPOCHS | 20 | Training iterations (15 club + 4 national) |
 | d_model | 64 | Transformer embedding dimension |
 | nhead | 4 | Number of attention heads |
 | num_layers | 2 | Transformer encoder layers |
 | dropout | 0.1 | Regularization rate |
 | dim_feedforward | 128 | Hidden layer size in FFN |
 
-## 📊 Example Prediction
+## Example Prediction
 
 ```plaintext
 Input: France vs England
@@ -181,25 +206,25 @@ Top 3 Predicted Outcomes:
 Prediction Confidence: High (recent data, established teams)
 ```
 
-## 📐 Technical Details
+## Technical Details
 
 ### Poisson Distribution for Football Scoring
 
-Goal scoring in football approximates a Poisson distribution. Given predicted expected goals ($\lambda$), we calculate exact score probabilities:
+Goal scoring in football approximates a Poisson distribution. Given predicted expected goals (λ), we calculate exact score probabilities:
 
 $$P(X = k) = \frac{e^{-\lambda} \lambda^k}{k!}$$
 
-For a match between Team A ($\lambda_a$) and Team B ($\lambda_b$):
+For a match between Team A (λ_a) and Team B (λ_b):
 
 $$P(\text{Score} = k_1-k_2) = P_A(k_1) \times P_B(k_2)$$
 
 ### Why Transformers for This Task?
 
-- ✅ **Temporal Dependencies:** Self-attention captures which past matches influence predictions.
-- ✅ **Variable Importance:** Handles important recent matches vs. older patterns automatically.
-- ✅ **Parallel Processing:** Efficient computation on GPU with batch processing.
-- ✅ **Long-Range Context:** No vanishing gradient problems like RNNs.
-- ✅ **Transfer Learning:** Attention patterns interpretable and analyzable.
+- **Temporal Dependencies:** Self-attention captures which past matches influence predictions.
+- **Variable Importance:** Handles important recent matches vs. older patterns automatically.
+- **Parallel Processing:** Efficient computation on GPU with batch processing.
+- **Long-Range Context:** No vanishing gradient problems like RNNs.
+- **Transfer Learning:** Attention patterns interpretable and analyzable.
 
 ### ELO Rating System
 
@@ -209,33 +234,28 @@ $$\text{Expected Score} = \frac{1}{1 + 10^{\frac{\text{opponent rating} - \text{
 
 $$\text{New Rating} = \text{Old Rating} + K \times (\text{Actual} - \text{Expected})$$
 
-## 🔧 Advanced Usage
+## Advanced Usage
 
 ### Training on Custom Data
 
 ```python
-from world_cup_model import FootballDataset, WorldCupTransformer
+from world_cup_prediction import FootballDataset, WorldCupTransformer
 
-dataset = FootballDataset('your_data.csv', seq_len=5, split_type='train')
-model = WorldCupTransformer(num_features=3, d_model=64, nhead=4)
+dataset = FootballDataset('data/your_data.csv', seq_len=5, split_type='train')
+model = WorldCupTransformer(num_features=5, d_model=64, nhead=4)
 # Train your model...
 ```
 
 ### Batch Predictions
 
 ```python
-from live_predictor import predict_match_outcome
+from world_cup_prediction import predict_match_outcome
 
-matches = [
-    (["France", "England", "Germany"], ["Spain", "Italy", "Netherlands"]),
-]
-
-for home_teams, away_teams in matches:
-    predictions = predict_match_outcome(model, home_seq, away_seq, home_teams[0], away_teams[0])
-    print(predictions)
+predictions = predict_match_outcome(model, home_seq, away_seq, "France", "England")
+print(predictions)
 ```
 
-## 📈 Model Performance & Limitations
+## Model Performance and Limitations
 
 ### Strengths
 
@@ -246,7 +266,7 @@ for home_teams, away_teams in matches:
 
 ### Limitations
 
-- Historical data bias (past $\neq$ future performance).
+- Historical data bias (past ≠ future performance).
 - Doesn't account for: injuries, tactical changes, player transfers, manager effects.
 - Relies on match quality (friendly matches skewed).
 - External events (COVID, breaks) affect prediction accuracy.
@@ -260,7 +280,7 @@ The model is evaluated using:
 - **Outcome Accuracy:** Win/Draw/Loss prediction accuracy.
 - **Calibration:** How well predicted probabilities match actual frequencies.
 
-## 🎓 Future Enhancements
+## Future Enhancements
 
 - [ ] **Player-Level Data:** Incorporate squad information and player ratings.
 - [ ] **Injury Database:** Account for key player absences.
@@ -269,30 +289,30 @@ The model is evaluated using:
 - [ ] **Ensemble Methods:** Combine multiple model architectures.
 - [ ] **Real-Time Updates:** Live team form tracking during tournaments.
 - [ ] **Betting Odds Integration:** Compare predictions vs. market odds.
-- [ ] **Weather & Venue:** Environmental factors (altitude, weather patterns).
+- [ ] **Weather and Venue:** Environmental factors (altitude, weather patterns).
 
-## 📦 Dependencies
+## Dependencies
 
-See `req.txt`:
+See `requirements.txt`:
 
 - **torch** — Deep learning framework
 - **pandas** — Data manipulation and analysis
 - **numpy** — Numerical computing
 - **scipy** — Scientific computing (Poisson distribution)
-- **streamlit** — Web interface (optional, for GUI)
+- **streamlit** — Web interface (for GUI)
 
-## 📄 License
+## License
 
 Specify your license here (MIT, Apache 2.0, etc.)
 
-## 📚 Data Source
+## Data Source
 
 Historical match data sourced from:
 
 - **Kaggle:** International Football Results Dataset
-- **Club Data:** Downloaded via internal pipeline
+- **Club Data:** Downloaded via `scripts/download_club_data.py`
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This model is for **educational and entertainment purposes only**.
 
@@ -305,7 +325,7 @@ Football match outcomes are influenced by countless factors beyond historical sc
 
 Do not use for gambling or financial decisions without additional analysis and risk management.
 
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! Areas for improvement:
 
@@ -314,7 +334,7 @@ Contributions welcome! Areas for improvement:
 - Feature engineering
 - Documentation and examples
 
-## 👤 Author
+## Author
 
 Developed as a machine learning project combining deep learning with sports analytics.
 
