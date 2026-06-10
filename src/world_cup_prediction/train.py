@@ -14,6 +14,7 @@ from world_cup_prediction.config import (
     PRETRAINED_CLUBS_PATH,
     SEQ_LEN,
     TOURNAMENT_STATE_PATH,
+    NATIONAL_RESULTS_WITH_SQUADS_CSV
 )
 from world_cup_prediction.dataset import FootballDataset
 from world_cup_prediction.model import WorldCupTransformer
@@ -103,11 +104,12 @@ def main():
     print("PHASE 2: Fine-Tuning on National Teams Data")
     print("==================================================")
 
+    train_ratio = 0.9
     nat_train = FootballDataset(
-        csv_path=NATIONAL_RESULTS_CSV, seq_len=SEQ_LEN, split_type='train', test_size=0.1
+        csv_path=NATIONAL_RESULTS_CSV, seq_len=SEQ_LEN, split_type='train', train_ratio = train_ratio
     )
     nat_test = FootballDataset(
-        csv_path=NATIONAL_RESULTS_CSV, seq_len=SEQ_LEN, split_type='test', test_size=0.1
+        csv_path=NATIONAL_RESULTS_CSV, seq_len=SEQ_LEN, split_type='test', train_ratio = train_ratio
     )
 
     nat_train_loader = DataLoader(nat_train, batch_size=BATCH_SIZE, shuffle=True)

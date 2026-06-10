@@ -40,6 +40,12 @@ class FootballDataset(Dataset):
             current_away_elo = team_elos[away]
             is_neutral = bool('neutral' in df.columns and row['neutral'])
 
+            # # --- הוספת פיצ'ר הסגל (עם טריק הפיצ'ר השקוף למועדונים) ---
+            # if 'home_squad_rating' in df.columns and 'away_squad_rating' in df.columns:
+            #     squad_diff = (row['home_squad_rating'] - row['away_squad_rating']) / 100.0
+            # else:
+            #     squad_diff = 0.0
+
             idx_home = team_current_idx[home]
             idx_away = team_current_idx[away]
 
@@ -51,13 +57,16 @@ class FootballDataset(Dataset):
                 all_b_data.append(away_seq)
                 all_actual_scores.append([row['home_score'], row['away_score']])
 
+            # --- קריאה מעודכנת לפונקציית העזר ---
             home_features, away_features = build_match_features(
                 current_home_elo,
                 current_away_elo,
                 row['home_score'],
                 row['away_score'],
                 is_neutral=is_neutral,
+                # squad_diff=squad_diff  # העברת הפיצ'ר ה-6 לפונקציה
             )
+            
             team_histories[home].append(home_features)
             team_histories[away].append(away_features)
 
