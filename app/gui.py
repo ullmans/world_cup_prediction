@@ -1,15 +1,49 @@
 import json
 
+import base64
 import streamlit as st
+from pathlib import Path
 
 from world_cup_prediction.config import TEAMS_MAPPING_JSON
 from world_cup_prediction.memory import update_tournament_memory
 from world_cup_prediction.predictor import main_live_predictor
 
+
+
+def get_base64_img(file_path):
+    """Converts a local image file into a base64 string."""
+    with open(file_path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def set_background(file_path):
+    """Injects custom CSS to set the background image."""
+    bin_str = get_base64_img(file_path)
+    
+    # Use .stApp to target the entire Streamlit application container
+    bg_img_css = f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{bin_str}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    </style>
+    """
+    st.markdown(bg_img_css, unsafe_allow_html=True)
+
+
 with open(TEAMS_MAPPING_JSON, encoding="utf-8") as f:
     TEAMS_MAPPING = json.load(f)
 
 hebrew_team_names = sorted(TEAMS_MAPPING.keys())
+
+# Call the function with your local file path
+CURRENT_DIR = Path(__file__).parent
+IMAGE_PATH = CURRENT_DIR.parent / "data" / "background.jpg" 
+set_background(IMAGE_PATH)
 
 st.set_page_config(page_title="World Cup Predictor", page_icon="⚽", layout="centered")
 st.title("⚽ World Cup Live Predictor")
